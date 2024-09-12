@@ -2,7 +2,7 @@
 // Copyright (c) 2021-2024, Auburn University
 // Part of azplugins, released under the BSD 3-Clause License.
 
-#include "OPLSDihedralForceCompute.h"
+#include "CombinedBTDihedralForceCompute.h"
 
 #include <cmath>
 #include <iostream>
@@ -11,21 +11,19 @@
 
 using namespace std;
 
-/*! \file OPLSDihedralForceCompute.cc
-    \brief Contains code for the OPLSDihedralForceCompute class
+/*! \file CombinedBTDihedralForceCompute.cc
+    \brief Contains code for the CombinedBTDihedralForceCompute class
 */
 
-namespace hoomd
-    {
-namespace md
+namespace azplugins
     {
 /*! \param sysdef System to compute forces on
     \post Memory is allocated, and forces are zeroed.
 */
-OPLSDihedralForceCompute::OPLSDihedralForceCompute(std::shared_ptr<SystemDefinition> sysdef)
+CombinedBTDihedralForceCompute::CombinedBTDihedralForceCompute(std::shared_ptr<SystemDefinition> sysdef)
     : ForceCompute(sysdef)
     {
-    m_exec_conf->msg->notice(5) << "Constructing OPLSDihedralForceCompute" << endl;
+    m_exec_conf->msg->notice(5) << "Constructing CombinedBTDihedralForceCompute" << endl;
 
     // access the dihedral data for later use
     m_dihedral_data = m_sysdef->getDihedralData();
@@ -41,25 +39,27 @@ OPLSDihedralForceCompute::OPLSDihedralForceCompute(std::shared_ptr<SystemDefinit
     m_params.swap(params);
     }
 
-OPLSDihedralForceCompute::~OPLSDihedralForceCompute()
+CombinedBTDihedralForceCompute::~CombinedBTDihedralForceCompute()
     {
-    m_exec_conf->msg->notice(5) << "Destroying OPLSDihedralForceCompute" << endl;
+    m_exec_conf->msg->notice(5) << "Destroying CombinedBTDihedralForceCompute" << endl;
     }
 
 /*! \param type Type of the dihedral to set parameters for
-    \param k1 Force parameter in OPLS-style dihedral
-    \param k2 Force parameter in OPLS-style dihedral
-    \param k3 Force parameter in OPLS-style dihedral
-    \param k4 Force parameter in OPLS-style dihedral
+    \param k_phi Overall Force parameter in CombinedBT-style dihedral
+    \param a0 Force parameter in CombinedBT-style dihedral
+    \param a1 Force parameter in CombinedBT-style dihedral
+    \param a2 Force parameter in CombinedBT-style dihedral
+    \param a3 Force parameter in CombinedBT-style dihedral
+    \param a4 Force parameter in CombinedBT-style dihedral
 
-    Sets the parameters for the potential of an OPLS Dihedral, storing them with the
-    1/2 prefactor.
 */
-void OPLSDihedralForceCompute::setParams(unsigned int type,
-                                         Scalar k1,
-                                         Scalar k2,
-                                         Scalar k3,
-                                         Scalar k4)
+void CombinedBTDihedralForceCompute::setParams(unsigned int type,
+                                         Scalar k_phi,
+                                         Scalar a0,
+                                         Scalar a1,
+                                         Scalar a2,
+                                         Scalar a3,
+                                         Scalar a4)
     {
     // make sure the type is valid
     if (type >= m_dihedral_data->getNTypes())
@@ -69,17 +69,17 @@ void OPLSDihedralForceCompute::setParams(unsigned int type,
 
     // set parameters in m_params
     ArrayHandle<Scalar4> h_params(m_params, access_location::host, access_mode::readwrite);
-    h_params.data[type] = make_scalar4(k1 / 2.0, k2 / 2.0, k3 / 2.0, k4 / 2.0);
+    h_params.data[type] = make_scalar4(k_phi, a0, a1, a2, a3, a4);
     }
 
-void OPLSDihedralForceCompute::setParamsPython(std::string type, pybind11::dict params)
+void CombinedBTDihedralForceCompute::setParamsPython(std::string type, pybind11::dict params)
     {
     auto typ = m_dihedral_data->getTypeByName(type);
-    dihedral_opls_params _params(params);
-    setParams(typ, _params.k1, _params.k2, _params.k3, _params.k4);
+    dihedral_combinedbt_params _params(params);
+    setParams(typ, _params.k_phi, _params.a0, _params.a1, _params.a2, _params.a3, _params.a4);
     }
 
-pybind11::dict OPLSDihedralForceCompute::getParams(std::string type)
+pybind11::dict CombinedBTDihedralForceCompute::getParams(std::string type)
     {
     auto typ = m_dihedral_data->getTypeByName(type);
     // make sure the type is valid
@@ -101,7 +101,7 @@ pybind11::dict OPLSDihedralForceCompute::getParams(std::string type)
 /*! Actually perform the force computation
     \param timestep Current time step
  */
-void OPLSDihedralForceCompute::computeForces(uint64_t timestep)
+void CombinedBTDihedralForceCompute::computeForces(uint64_t timestep)
     {
     assert(m_pdata);
     // access the particle data arrays
@@ -141,6 +141,8 @@ void OPLSDihedralForceCompute::computeForces(uint64_t timestep)
     Scalar c, s, p, sx2, sy2, sz2, cos_term, e_dihedral;
     Scalar k1, k2, k3, k4;
     Scalar dihedral_virial[6];
+    Scalar angle_012_virial[6];
+    Scalar angle_123_virial[6];
 
     // get a local copy of the simulation box
     const BoxDim& box = m_pdata->getBox();
@@ -166,7 +168,7 @@ void OPLSDihedralForceCompute::computeForces(uint64_t timestep)
         if (i1 == NOT_LOCAL || i2 == NOT_LOCAL || i3 == NOT_LOCAL || i4 == NOT_LOCAL)
             {
             this->m_exec_conf->msg->error()
-                << "dihedral.opls: dihedral " << dihedral.tag[0] << " " << dihedral.tag[1] << " "
+                << "dihedral.combinedbt: dihedral " << dihedral.tag[0] << " " << dihedral.tag[1] << " "
                 << dihedral.tag[2] << " " << dihedral.tag[3] << " incomplete." << endl
                 << endl;
             throw std::runtime_error("Error in dihedral calculation");
@@ -239,14 +241,59 @@ void OPLSDihedralForceCompute::computeForces(uint64_t timestep)
         // get values for k1/2 through k4/2
         // ----- The 1/2 factor is already stored in the parameters --------
         dihedral_type = m_dihedral_data->getTypeByIndex(n);
-        k1 = h_params.data[dihedral_type].x;
-        k2 = h_params.data[dihedral_type].y;
-        k3 = h_params.data[dihedral_type].z;
-        k4 = h_params.data[dihedral_type].w;
+        // k1 = h_params.data[dihedral_type].x;
+        // k2 = h_params.data[dihedral_type].y;
+        // k3 = h_params.data[dihedral_type].z;
+        // k4 = h_params.data[dihedral_type].w;
+        k_phi = h_params.data[dihedral_type].     ;
+        a0 = h_params.data[dihedral_type].    ;
+        a1 = h_params.data[dihedral_type].    ;
+        a2 = h_params.data[dihedral_type].    ;
+        a3 = h_params.data[dihedral_type].    ;
+        a4 = h_params.data[dihedral_type].    ;
 
-        // calculate the potential p = sum (i=1,4) k_i * (1 + (-1)**(i+1)*cos(i*phi) )
+        // calculate the potential p = k_phi * sin^3(theta_i-1) * sin^3(theta_i) * sum (n=0,4) (a_n*cos^n(phi) )
         // and df = dp/dc
 
+
+        // n = 0
+        p = a0
+        // df = 
+
+        // n = 1
+        running_cos = c
+        p += a1 * running_cos
+        // df = 
+
+        // n = 2
+        running_cos = running_cos * c
+        p += a2 * running_cos
+        // df = 
+
+        // n = 3
+        running_cos = running_cos * c
+        p += a3 * running_cos
+        // df = 
+
+        // n = 4
+        running_cos = running_cos * c
+        p += a4 * running_cos
+        // df = 
+
+        // prefactor
+            // normal unit vector for testing
+        r_v1  = sqrt(vb1.x * vb1.x + vb1.y * vb1.y + vb1.z * vb1.z)
+        r_v2m = sqrt(vb2m.x * vb2m.x + vb2m.y * vb2m.y + vb2m.z * vb2m.z)
+        r_v3  = sqrt(vb3.x * vb3.x + vb3.y * vb3.y + vb3.z * vb3.z)
+        sin_0 = sqrt(rasq)/r_v1/r_v2m
+        sin_1 = sqrt(rbsq)/r_v2m/r_v3
+        pref = k_phi * sin_0 * sin_0 * sin_0 * sin_1 * sin_1 * sin_1
+
+        p = pref * p
+        // df = 
+
+
+        /**
         // cos(phi) term
         ddf1 = c;
         df1 = s;
@@ -254,7 +301,6 @@ void OPLSDihedralForceCompute::computeForces(uint64_t timestep)
 
         p = k1 * (1.0 + cos_term);
         df = k1 * df1;
-
         // cos(2*phi) term
         ddf1 = cos_term * c - df1 * s;
         df1 = cos_term * s + df1 * c;
@@ -278,9 +324,183 @@ void OPLSDihedralForceCompute::computeForces(uint64_t timestep)
 
         p += k4 * (1.0 - cos_term);
         df += -4.0 * k4 * df1;
+        */
 
         // Compute 1/4 of energy to assign to each of 4 atoms in the dihedral
         e_dihedral = 0.25 * p;
+
+        //For each bead;
+        //Caclualte all partials;
+        // So lets start with just r0; F0; and then generalize;
+        vb1 = r0-r1;
+        vb2m = r1-r2;
+        // vc = r2 - r3;
+        vb3m.x = -vb3.x;
+        vb3m.y = -vb3.y;
+        vb3m.z = -vb3.z;
+        vb3m = box.minImage(vb3m);
+
+        Caa = vb1.x * vb1.x + vb1.y * vb1.y + vb1.z * vb1.z;
+        Cab = vb1.x * vb2m.x + vb1.y * vb2m.y + vb1.z * vb2m.z;
+        Cbb = vb2m.x * vb2m.x + vb2m.y * vb2m.y + vb2m.z * vb2m.z ;
+        //Caa = np.dot(vb1,vb1);
+        //Cab = np.dot(vb1,vb2m);
+        //Cbb = np.dot(vb2m,vb2m);
+        Dab = Caa*Cbb-Cab**2;
+        Cbc = vb2m.x * vb3m.x + vb2m.y * vb3m.y + vb2m.z * vb3m.z;
+        // Cbc = np.dot(vb2m,vb3m);
+        Ccc = vb3m.x * vb3m.x + vb3m.y * vb3m.y + vb3m.z * vb3m.z;
+        // Ccc=np.dot(vb3m,vb3m);
+        Cac = vb1.x * vb3m.x + vb1.y * vb3m.y + vb1.z * vb3m.z;
+        // Cac = np.dot(vb1,vb3m);
+        Dbc = Cbb*Ccc-Cbc**2;
+
+        rb1 = sqrt(Caa);
+        rb2 = sqrt(Cbb);
+        rb3 = sqrt(Ccc);
+
+        cos_theta_012 = Cab/(rb1*rb2);
+        cos_theta_123 = Cbc/(rb2*rb3);
+        theta_012 = acos(cos_theta_012);
+        theta_123 = acos(cos_theta_123);
+        /**
+         * 
+        Scalar3 d123, d012;
+        d123.x = vb3m.y * vb2m.z - vb3m.z * vb2m.y;
+        d123.y = vb3m.z * vb2m.x - vb3m.x * vb2m.z;
+        d123.z = vb2m.x * vb3m.y - vb3m.y * vb2m.x;
+        d012.x = vb2m.y * vb1.z - vb2m.z * vb1.y;
+        d012.y = vb2m.z * vb1.x - vb2m.x * vb1.z;
+        d012.z = vb2m.x * vb1.y - vb2m.y * vb1.x;
+
+        // d123 = np.cross(vb3m,vb2m);
+        // d012 = np.cross(vb2m,vb1);
+        // at some point need to replace the norm of a parallel line = 0 to = .0001;
+        cos_phi_0123 = -np.dot(d123,d012)/(np.linalg.norm(d123)*np.linalg.norm(d012));
+         */
+        cos_phi_0123 = c
+        phi_0123 = acos(cos_phi_0123);
+        // V,_,_,_ = V_CBT(r0,r1,r2,r3); p calculated above
+    
+        //Start by establishing what I need for r0;
+        dVdtheta012 = 3*(sin(theta_012)**2)*cos_theta_012*p;
+        dtheta012dcostheta012 = 1/sin(theta_012);
+        da2dr0 = 2*vb1;
+        dabdr0 = vb2m;
+        dcostheta012dr0 = 1/rb1/rb2*(dabdr0)-cos_theta_012/2/rb1/rb1*(da2dr0);
+        
+        F0_theta_012 = -dVdtheta012*dtheta012dcostheta012*dcostheta012dr0;
+        F0_theta_123 = 0;
+        dVdcosphi_0123 = a1 + 2*a2*cos_phi_0123 + 3*a3*cos_phi_0123*cos_phi_0123 + 4*a4*cos_phi_0123*cos_phi_0123*cos_phi_0123;
+        dVdcosphi_0123 = dVdcosphi_0123*p;
+        dcosphidr0 = -(sqrt(1/Dab/Dbc))*(Cbc*vb2m-Cbb*vb3m-1/Dbc*(Cab*Cbc-Cac*Cbb)*(Cbb*vb1-Cab*vb2m));
+        // dcosphidr0 = -(Dab*Dbc)**(-1/2)*(Cbc*vb2m-Cbb*vb3m-1/Dbc*(Cab*Cbc-Cac*Cbb)*(Cbb*vb1-Cab*vb2m));
+        F0_phi_0123 = -dVdcosphi_0123*dcosphidr0;
+        F0 = F0_theta_012 + F0_theta_123 + F0_phi_0123;
+    
+        //Next, let's do F1, where we must consider new things because we are part of two angle potentials instead of just one,
+        da2dr1 = -2*vb1;
+        db2dr1 = 2*vb2m;
+        dabdr1 = vb2m-vb1;
+        dcostheta012dr1 = 1/rb1/rb2*(dabdr1)-cos_theta_012/2*((1/rb1**2)*(da2dr1)+1/rb2**2*db2dr1);
+        F1_theta_012 = -dVdtheta012*dtheta012dcostheta012*dcostheta012dr1;
+        //dV 123 nonspecific terms;
+        dVdtheta123=3*(sin(theta_123)**2)*cos_theta_123*p;
+        dtheta123dcostheta123 = 1/sin(theta_123);
+        
+        da2dr1_123 = 2*vb2m;
+        dabdr1_123 = vb3m;
+        dcostheta123dr1 = 1/rb2/rb3*(dabdr1_123)-cos_theta_123/2/(rb2**2)*(da2dr1_123);
+        F1_theta_123 = -dVdtheta123*dtheta123dcostheta123*dcostheta123dr1;
+    
+        dcosphidr1 = -(Dab*Dbc)**(-1/2)*(Cbc*vb1 - Cbc*vb2m+Cab*vb3m+Cbb*vb3m-2*Cac*vb2m-1/Dbc*(Cab*Cbc-Cac*Cbb)*(Ccc*vb2m-Cbc*vb3m)-1/Dab*(Cab*Cbc-Cac*Cbb)*(Caa*vb2m-Cbb*vb1-Cab*vb1+Cab*vb2m));
+        F1_phi_0123 = -dVdcosphi_0123*dcosphidr1;
+        F1 = F1_phi_0123+F1_theta_012+F1_theta_123;
+    
+        //F2;
+        da2dr2 = 0;
+        db2dr2 = -2*vb2m;
+        dabdr2 = -vb1;
+        dcostheta012dr2 = 1/rb1/rb2*(dabdr2)-cos_theta_012/2*((1/rb1**2)*(da2dr2)+1/rb2**2*db2dr2);
+        F2_theta_012 = -dVdtheta012*dtheta012dcostheta012*dcostheta012dr2;
+        da2dr2_123 = -2*vb2m;
+        db2dr2_123 = 2*vb3m;
+        dabdr2_123 = vb3m-vb2m;
+        dcostheta123dr2 = 1/rb2/rb3*(dabdr2_123)-cos_theta_123/2*((1/rb2**2)*(da2dr2_123)+1/(rb3**2)*db2dr2_123);
+        F2_theta_123 = -dVdtheta123*dtheta123dcostheta123*dcostheta123dr2;
+        dcosphidr2 = -(sqrt(1/Dab/Dbc))*(-Cbc*vb1+Cab*vb2m-Cab*vb3m-Cbb*vb1+2*Cac*vb2m-1/Dbc*(Cab*Cbc-Cac*Cbb)*(Cbb*vb3m-Ccc*vb2m-Cbc*vb2m+Cbc*vb3m)-1/Dab*(Cab*Cbc-Cac*Cbb)*(-Caa*vb2m+Cab*vb1));
+        // dcosphidr2 = -(Dab*Dbc)**(-1/2)*(-Cbc*vb1+Cab*vb2m-Cab*vb3m-Cbb*vb1+2*Cac*vb2m-1/Dbc*(Cab*Cbc-Cac*Cbb)*(Cbb*vb3m-Ccc*vb2m-Cbc*vb2m+Cbc*vb3m)-1/Dab*(Cab*Cbc-Cac*Cbb)*(-Caa*vb2m+Cab*vb1));
+        F2_phi_0123 = -dVdcosphi_0123*dcosphidr2;
+    
+        F2 = F2_theta_012+F2_theta_123+F2_phi_0123;
+    
+        //F3;
+        F3_theta_012 = 0;
+    
+        da2dr3_123 = 0;
+        db2dr3_123 = -2*vb3m;
+        dabdr3_123 = -vb2m;
+        dcostheta123dr3 = 1/rb2/rb3*(dabdr3_123)-cos_theta_123/2*((1/rb2/rb2)*(da2dr3_123)+1/rb3/rb3*db2dr3_123);
+        F3_theta_123 = -dVdtheta123*dtheta123dcostheta123*dcostheta123dr3;
+    
+        dcosphidr3 = -(sqrt(1/Dab/Dbc))*(-Cab*vb2m+Cbb*vb1-1/Dbc*(Cab*Cbc-Cac*Cbb)*(-Cbb*vb3m+Cbc*vb2m));
+        // dcosphidr3 = -(Dab*Dbc)**(-1/2)*(-Cab*vb2m+Cbb*vb1-1/Dbc*(Cab*Cbc-Cac*Cbb)*(-Cbb*vb3m+Cbc*vb2m));
+        F3_phi_0123 = -dVdcosphi_0123*dcosphidr3;
+        F3 = F3_theta_012+F3_phi_0123+F3_theta_123;
+        // F = [F0,F1,F2,F3];
+        //cbt_eng;
+        cbt_eng = 0.25*p //I believe this is correct since there is no way to seperate the different angles in the potential;
+    
+        //For the virials. From my reading, I believe I should do for each atom the dihedral + for atoms 1-3 the first angle virial + for atoms 2-4 the second angle virial;
+        angle_012_v[0] = (1. / 3.) * (vb1[0] * F0_theta_012[0] + vb2m[0] * F2_theta_012[0]);
+        angle_012_v[1] = (1. / 3.) * (vb1[1] * F0_theta_012[0] + vb2m[1] * F2_theta_012[0]);
+        angle_012_v[2] = (1. / 3.) * (vb1[2] * F0_theta_012[0] + vb2m[2] * F2_theta_012[0]);
+        angle_012_v[3] = (1. / 3.) * (vb1[1] * F0_theta_012[1] + vb2m[1] * F2_theta_012[1]);
+        angle_012_v[4] = (1. / 3.) * (vb1[2] * F0_theta_012[1] + vb2m[2] * F2_theta_012[1]);
+        angle_012_v[5] = (1. / 3.) * (vb1[2] * F0_theta_012[2] + vb2m[2] * F2_theta_012[2]);
+    
+        angle_123_v[0] = (1. / 3.) * (vb2m[0] * F1_theta_123[0] + vb3m[0] * F3_theta_123[0]);
+        angle_123_v[1] = (1. / 3.) * (vb2m[1] * F1_theta_123[0] + vb3m[1] * F3_theta_123[0]);
+        angle_123_v[2] = (1. / 3.) * (vb2m[2] * F1_theta_123[0] + vb3m[2] * F3_theta_123[0]);
+        angle_123_v[3] = (1. / 3.) * (vb2m[1] * F1_theta_123[1] + vb3m[1] * F3_theta_123[1]);
+        angle_123_v[4] = (1. / 3.) * (vb2m[2] * F1_theta_123[1] + vb3m[2] * F3_theta_123[1]);
+        angle_123_v[5] = (1. / 3.) * (vb2m[2] * F1_theta_123[2] + vb3m[2] * F3_theta_123[2]);
+    
+        dihedral_virial[0] = 0.25 * (vb1[0] * F0_phi_0123[0] + vb2m[0] * F2_phi_0123[0] + (vb3m[0]+ vb2m[0]) * F3_phi_0123[0]);
+        dihedral_virial[1] = 0.25 * (vb1[1] * F0_phi_0123[0] + vb2m[1] * F2_phi_0123[0] + (vb3m[1]+ vb2m[1]) * F3_phi_0123[0]);
+        dihedral_virial[2] = 0.25 * (vb1[2] * F0_phi_0123[0] + vb2m[2] * F2_phi_0123[0] + (vb3m[2]+ vb2m[2]) * F3_phi_0123[0]);
+        dihedral_virial[3] = 0.25 * (vb1[1] * F0_phi_0123[1] + vb2m[1] * F2_phi_0123[1] + (vb3m[1]+ vb2m[1]) * F3_phi_0123[1]);
+        dihedral_virial[4] = 0.25 * (vb1[2] * F0_phi_0123[1] + vb2m[2] * F2_phi_0123[1] + (vb3m[2]+ vb2m[2]) * F3_phi_0123[1]);
+        dihedral_virial[5] = 0.25 * (vb1[2] * F0_phi_0123[2] + vb2m[2] * F2_phi_0123[2] + (vb3m[2]+ vb2m[2]) * F3_phi_0123[2]);
+
+        // Apply force to each of the 4 atoms
+        h_force.data[i1].x = h_force.data[i1].x + F0.x;
+        h_force.data[i1].y = h_force.data[i1].y + F0.y;
+        h_force.data[i1].z = h_force.data[i1].z + F0.z;
+        h_force.data[i1].w = h_force.data[i1].w + F0.w;
+        h_force.data[i2].x = h_force.data[i2].x + F1.x;
+        h_force.data[i2].y = h_force.data[i2].y + F1.y;
+        h_force.data[i2].z = h_force.data[i2].z + F1.z;
+        h_force.data[i2].w = h_force.data[i2].w + F1.w;
+        h_force.data[i3].x = h_force.data[i3].x + F2.x;
+        h_force.data[i3].y = h_force.data[i3].y + F2.y;
+        h_force.data[i3].z = h_force.data[i3].z + F2.z;
+        h_force.data[i3].w = h_force.data[i3].w + F2.w;
+        h_force.data[i4].x = h_force.data[i4].x + F3.x;
+        h_force.data[i4].y = h_force.data[i4].y + F3.y;
+        h_force.data[i4].z = h_force.data[i4].z + F3.z;
+        h_force.data[i4].w = h_force.data[i4].w + F3.w;
+
+        for (int k = 0; k < 6; k++)
+            {
+            h_virial.data[virial_pitch * k + i1] += angle_012_virial[k] + dihedral_virial[k];
+            h_virial.data[virial_pitch * k + i2] += angle_012_virial[k] + angle_123_virial[k] + dihedral_virial[k];
+            h_virial.data[virial_pitch * k + i3] += angle_012_virial[k] + angle_123_virial[k] + dihedral_virial[k];
+            h_virial.data[virial_pitch * k + i4] += angle_123_virial[k] + dihedral_virial[k];
+            }
+        }
+
+        /**
 
         fg = vb1.x * vb2m.x + vb1.y * vb2m.y + vb1.z * vb2m.z;
         hg = vb3.x * vb2m.x + vb3.y * vb2m.y + vb3.z * vb2m.z;
@@ -358,20 +578,20 @@ void OPLSDihedralForceCompute::computeForces(uint64_t timestep)
             h_virial.data[virial_pitch * k + i4] += dihedral_virial[k];
             }
         }
+        */
     }
 
 namespace detail
     {
-void export_OPLSDihedralForceCompute(pybind11::module& m)
+void export_CombinedDihedralForceCompute(pybind11::module& m)
     {
-    pybind11::class_<OPLSDihedralForceCompute,
+    pybind11::class_<CombinedBTDihedralForceCompute,
                      ForceCompute,
-                     std::shared_ptr<OPLSDihedralForceCompute>>(m, "OPLSDihedralForceCompute")
+                     std::shared_ptr<CombinedBTDihedralForceCompute>>(m, "CombinedBTDihedralForceCompute")
         .def(pybind11::init<std::shared_ptr<SystemDefinition>>())
-        .def("setParams", &OPLSDihedralForceCompute::setParamsPython)
-        .def("getParams", &OPLSDihedralForceCompute::getParams);
+        .def("setParams", &CombinedBTDihedralForceCompute::setParamsPython)
+        .def("getParams", &CombinedBTDihedralForceCompute::getParams);
     }
 
     } // end namespace detail
-    } // end namespace md
-    } // end namespace hoomd
+    } // end namespace azplugins

@@ -3,36 +3,34 @@
 // Part of azplugins, released under the BSD 3-Clause License.
 
 #include "hip/hip_runtime.h"
-#include "OPLSDihedralForceGPU.cuh"
+#include "CombinedBTDihedralForceGPU.cuh"
 #include "hoomd/TextureTools.h"
 
 #include <assert.h>
 
-/*! \file OPLSDihedralForceGPU.cu
-    \brief Defines GPU kernel code for calculating OPLS dihedral forces. Used by
-   OPLSDihedralForceComputeGPU.
+/*! \file CombinedBTDihedralForceGPU.cu
+    \brief Defines GPU kernel code for calculating CombinedBT dihedral forces. Used by
+   CombinedBTDihedralForceComputeGPU.
 */
 
 namespace azplugins
     {
-namespace md
+namespace gpu
     {
-namespace kernel
-    {
-//! Kernel for calculating OPLS dihedral forces on the GPU
+//! Kernel for calculating combined bending-torsion dihedral forces on the GPU
 /*! \param d_force Device memory to write computed forces
     \param d_virial Device memory to write computed virials
     \param virial_pitch pitch of 2D virial array
     \param N number of particles
     \param d_pos particle positions on the device
-    \param d_params Array of OPLS parameters k1/2, k2/2, k3/2, and k4/2
+    \param d_params Array of combined B-T parameters k1/2, k2/2, k3/2, and k4/2
     \param box Box dimensions for periodic boundary condition handling
     \param tlist Dihedral data to use in calculating the forces
     \param dihedral_ABCD List of relative atom positions in the dihedrals
     \param pitch Pitch of 2D dihedral list
     \param n_dihedrals_list List of numbers of dihedrals per atom
 */
-__global__ void gpu_compute_opls_dihedral_forces_kernel(Scalar4* d_force,
+__global__ void gpu_compute_combinedbt_dihedral_forces_kernel(Scalar4* d_force,
                                                         Scalar* d_virial,
                                                         const size_t virial_pitch,
                                                         const unsigned int N,
@@ -306,7 +304,7 @@ __global__ void gpu_compute_opls_dihedral_forces_kernel(Scalar4* d_force,
     \param dihedral_ABCD List of relative atom positions in the dihedrals
     \param pitch Pitch of 2D dihedral list
     \param n_dihedrals_list List of numbers of dihedrals per atom
-    \param d_params Array of OPLS parameters k1/2, k2/2, k3/2, and k4/2
+    \param d_params Array of combined B-T parameters k1/2, k2/2, k3/2, and k4/2
     \param n_dihedral_types Number of dihedral types in d_params
     \param block_size Block size to use when performing calculations
     \param compute_capability Compute capability of the device (200, 300, 350, ...)
@@ -336,7 +334,7 @@ hipError_t gpu_compute_combinedBT_dihedral_forces(Scalar4* d_force,
 
     unsigned int max_block_size;
     hipFuncAttributes attr;
-    hipFuncGetAttributes(&attr, (const void*)gpu_compute_opls_dihedral_forces_kernel);
+    hipFuncGetAttributes(&attr, (const void*)gpu_compute_combinedbt_dihedral_forces_kernel);
     max_block_size = attr.maxThreadsPerBlock;
     if (max_block_size % warp_size)
         // handle non-sensical return values from hipFuncGetAttributes
@@ -349,7 +347,7 @@ hipError_t gpu_compute_combinedBT_dihedral_forces(Scalar4* d_force,
     dim3 threads(run_block_size, 1, 1);
 
     // run the kernel
-    hipLaunchKernelGGL((gpu_compute_opls_dihedral_forces_kernel),
+    hipLaunchKernelGGL((gpu_compute_combinedbt_dihedral_forces_kernel),
                        dim3(grid),
                        dim3(threads),
                        0,
@@ -369,6 +367,5 @@ hipError_t gpu_compute_combinedBT_dihedral_forces(Scalar4* d_force,
     return hipSuccess;
     }
 
-    } // end namespace kernel
-    } // end namespace md
-    } // end namespace hoomd
+    } // end namespace gpu
+    } // end namespace azplugins

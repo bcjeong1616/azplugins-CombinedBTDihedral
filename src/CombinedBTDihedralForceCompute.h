@@ -8,8 +8,8 @@
 #include <memory>
 #include <vector>
 
-/*! \file OPLSDihedralForceCompute.h
-    \brief Declares a class for computing OPLS dihedrals
+/*! \file CombinedBTDihedralForceCompute.h
+    \brief Declares a class for computing CombinedBT dihedrals
 */
 
 #ifdef __HIPCC__
@@ -18,14 +18,12 @@
 
 #include <pybind11/pybind11.h>
 
-#ifndef __OPLSDIHEDRALFORCECOMPUTE_H__
-#define __OPLSDIHEDRALFORCECOMPUTE_H__
+#ifndef AZPLUGINS_COMBINEDBT_DIHEDRAL_FORCE_COMPUTE_H__
+#define AZPLUGINS_COMBINEDBT_DIHEDRAL_FORCE_COMPUTE_H__
 
-namespace hoomd
+namespace azplugins
     {
-namespace md
-    {
-struct dihedral_opls_params
+struct dihedral_combinedbt_params
     {
     Scalar k1;
     Scalar k2;
@@ -33,9 +31,9 @@ struct dihedral_opls_params
     Scalar k4;
 
 #ifndef __HIPCC__
-    dihedral_opls_params() : k1(0.), k2(0.), k3(0.), k4(0.) { }
+    dihedral_combinedbt_params() : k1(0.), k2(0.), k3(0.), k4(0.) { }
 
-    dihedral_opls_params(pybind11::dict v)
+    dihedral_combinedbt_params(pybind11::dict v)
         : k1(v["k1"].cast<Scalar>()), k2(v["k2"].cast<Scalar>()), k3(v["k3"].cast<Scalar>()),
           k4(v["k4"].cast<Scalar>())
         {
@@ -52,20 +50,21 @@ struct dihedral_opls_params
         }
 #endif
     } __attribute__((aligned(32)));
-//! Computes OPLS dihedral forces on each particle
-/*! OPLS dihedral forces are computed on every particle in the simulation.
+//! Computes combined bending-torsion proper dihedral forces on each particle
+/*! Combined bending-torsion proper dihedral forces are computed on every particle in 
+        the simulation.
 
     The dihedrals which forces are computed on are accessed from ParticleData::getDihedralData
     \ingroup computes
 */
-class PYBIND11_EXPORT OPLSDihedralForceCompute : public ForceCompute
+class PYBIND11_EXPORT CombinedBTDihedralForceCompute : public ForceCompute
     {
     public:
     //! Constructs the compute
-    OPLSDihedralForceCompute(std::shared_ptr<SystemDefinition> sysdef);
+    CombinedBTDihedralForceCompute(std::shared_ptr<SystemDefinition> sysdef);
 
     //! Destructor
-    virtual ~OPLSDihedralForceCompute();
+    virtual ~CombinedBTDihedralForceCompute();
 
     //! Set the parameters
     virtual void setParams(unsigned int type, Scalar k1, Scalar k2, Scalar k3, Scalar k4);
@@ -98,7 +97,6 @@ class PYBIND11_EXPORT OPLSDihedralForceCompute : public ForceCompute
     virtual void computeForces(uint64_t timestep);
     };
 
-    } // end namespace md
-    } // end namespace hoomd
+    } // end namespace azplugins
 
 #endif

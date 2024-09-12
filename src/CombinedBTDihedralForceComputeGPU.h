@@ -2,12 +2,12 @@
 // Copyright (c) 2021-2024, Auburn University
 // Part of azplugins, released under the BSD 3-Clause License.
 
-#include "OPLSDihedralForceCompute.h"
-#include "OPLSDihedralForceGPU.cuh"
+#include "CombinedBTDihedralForceCompute.h"
+#include "CombinedBTDihedralForceGPU.cuh"
 #include "hoomd/Autotuner.h"
 
-/*! \file OPLSDihedralForceComputeGPU.h
-    \brief Declares the OPLSDihedralForceComputeGPU class
+/*! \file CombinedBTDihedralForceComputeGPU.h
+    \brief Declares the CombinedBTDihedralForceComputeGPU class
 */
 
 #ifdef __HIPCC__
@@ -16,27 +16,25 @@
 
 #include <pybind11/pybind11.h>
 
-#ifndef __OPLSDIHEDRALFORCECOMPUTEGPU_H__
-#define __OPLSDIHEDRALFORCECOMPUTEGPU_H__
+#ifndef AZPLUGINS_COMBINEDBT_DIHEDRAL_FORCE_COMPUTE_GPU_H__
+#define AZPLUGINS_COMBINEDBT_DIHEDRAL_FORCE_COMPUTE_GPU_H__
 
-namespace hoomd
+namespace azplugins
     {
-namespace md
-    {
-//! Computes OPLS-style dihedral potentials on the GPU
-/*! Calculates the OPLS type dihedral force on the GPU
+//! Computes combined bending-torsion-style dihedral potentials on the GPU
+/*! Calculates the combined bending-torsion type dihedral force on the GPU
 
-    The GPU kernel for calculating this can be found in OPLSDihedralForceComputeGPU.cu
+    The GPU kernel for calculating this can be found in CombinedBTDihedralForceComputeGPU.cu
     \ingroup computes
 */
-class PYBIND11_EXPORT OPLSDihedralForceComputeGPU : public OPLSDihedralForceCompute
+class PYBIND11_EXPORT CombinedBTDihedralForceComputeGPU : public CombinedBTDihedralForceCompute
     {
     public:
     //! Constructs the compute
-    OPLSDihedralForceComputeGPU(std::shared_ptr<SystemDefinition> sysdef);
+    CombinedBTDihedralForceComputeGPU(std::shared_ptr<SystemDefinition> sysdef);
 
     //! Destructor
-    virtual ~OPLSDihedralForceComputeGPU() { }
+    virtual ~CombinedBTDihedralForceComputeGPU() { }
 
     private:
     std::shared_ptr<Autotuner<1>> m_tuner; //!< Autotuner for block size
@@ -44,7 +42,6 @@ class PYBIND11_EXPORT OPLSDihedralForceComputeGPU : public OPLSDihedralForceComp
     virtual void computeForces(uint64_t timestep);
     };
 
-    } // end namespace md
-    } // end namespace hoomd
+    } // end namespace azplugins
 
 #endif
