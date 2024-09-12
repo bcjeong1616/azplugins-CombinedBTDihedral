@@ -7,8 +7,8 @@
    dihedral forces. Used by CombinedBTDihedralForceComputeGPU.
 */
 
-#ifndef AZPLUGINS_COMBINEDBTDIHEDRAL_GPU_CUH_
-#define AZPLUGINS_COMBINEDBTDIHEDRAL_GPU_CUH_
+#ifndef AZPLUGINS_COMBINEDBT_DIHEDRAL_GPU_CUH_
+#define AZPLUGINS_COMBINEDBT_DIHEDRAL_GPU_CUH_
 
 #include "hoomd/BondedGroupData.cuh"
 #include "hoomd/HOOMDMath.h"

@@ -1,5 +1,6 @@
-// Copyright (c) 2009-2024 The Regents of the University of Michigan.
-// Part of HOOMD-blue, released under the BSD 3-Clause License.
+// Copyright (c) 2018-2020, Michael P. Howard
+// Copyright (c) 2021-2024, Auburn University
+// Part of azplugins, released under the BSD 3-Clause License.
 
 // this include is necessary to get MPI included before anything else to support intel MPI
 #include "hoomd/ExecutionConfiguration.h"
@@ -8,9 +9,9 @@
 
 #include <functional>
 
-#include "hoomd/md/OPLSDihedralForceCompute.h"
+#include "hoomd/md/CombinedBTDihedralForceCompute.h"
 #ifdef ENABLE_HIP
-#include "hoomd/md/OPLSDihedralForceComputeGPU.h"
+#include "hoomd/md/CombinedBTDihedralForceComputeGPU.h"
 #endif
 
 #include <stdio.h>
@@ -27,7 +28,7 @@ using namespace hoomd::md;
 HOOMD_UP_MAIN();
 
 //! Typedef to make using the std::function factory easier
-typedef std::function<std::shared_ptr<OPLSDihedralForceCompute>(
+typedef std::function<std::shared_ptr<CombinedBTDihedralForceCompute>(
     std::shared_ptr<SystemDefinition> sysdef)>
     dihedralforce_creator;
 
@@ -47,7 +48,7 @@ void dihedral_force_basic_tests(dihedralforce_creator tf_creator,
     pdata_4->setPosition(3, make_scalar3(0, 0.4, -0.6));
 
     // create the dihedral force compute to check
-    std::shared_ptr<OPLSDihedralForceCompute> fc_4 = tf_creator(sysdef_4);
+    std::shared_ptr<CombinedBTDihedralForceCompute> fc_4 = tf_creator(sysdef_4);
 
     // k1 = 1.5, k2 = 6.2, k3 = 1.7, k4 = 3.0
     fc_4->setParams(0, 1.5, 6.2, 1.7, 3.0);
@@ -317,7 +318,7 @@ void dihedral_force_basic_tests(dihedralforce_creator tf_creator,
     pdata_8->setPosition(6, make_scalar3(0.0, 2.9, -1.7));
     pdata_8->setPosition(7, make_scalar3(-2.0, 0.3, 0.7));
 
-    std::shared_ptr<OPLSDihedralForceCompute> fc_8 = tf_creator(sysdef_8);
+    std::shared_ptr<CombinedBTDihedralForceCompute> fc_8 = tf_creator(sysdef_8);
     fc_8->setParams(0, 2.0, 3.0, 4.0, 5.0);
     fc_8->setParams(1, 5.2, 4.2, 3.2, 1.2);
 
@@ -411,7 +412,7 @@ void dihedral_force_basic_tests(dihedralforce_creator tf_creator,
     pdata_5->setPosition(4, make_scalar3(4.8, 1.1, 0.0));
 
     // build the dihedral force compute and try it out
-    std::shared_ptr<OPLSDihedralForceCompute> fc_5 = tf_creator(sysdef_5);
+    std::shared_ptr<CombinedBTDihedralForceCompute> fc_5 = tf_creator(sysdef_5);
     fc_5->setParams(0, 1.2, 3.3, 4.2, 6.4);
 
     sysdef_5->getDihedralData()->addBondedGroup(Dihedral(0, 0, 1, 2, 3));
@@ -468,7 +469,7 @@ void dihedral_force_basic_tests(dihedralforce_creator tf_creator,
         }
     }
 
-//! Compares the output of two OPLSDihedralForceComputes
+//! Compares the output of two CombinedBTDihedralForceComputes
 void dihedral_force_comparison_tests(dihedralforce_creator tf_creator1,
                                      dihedralforce_creator tf_creator2,
                                      std::shared_ptr<ExecutionConfiguration> exec_conf)
@@ -483,8 +484,8 @@ void dihedral_force_comparison_tests(dihedralforce_creator tf_creator1,
     snap->dihedral_data.type_mapping.push_back("A");
     std::shared_ptr<SystemDefinition> sysdef(new SystemDefinition(snap, exec_conf));
 
-    std::shared_ptr<OPLSDihedralForceCompute> fc1 = tf_creator1(sysdef);
-    std::shared_ptr<OPLSDihedralForceCompute> fc2 = tf_creator2(sysdef);
+    std::shared_ptr<CombinedBTDihedralForceCompute> fc1 = tf_creator1(sysdef);
+    std::shared_ptr<CombinedBTDihedralForceCompute> fc2 = tf_creator2(sysdef);
     fc1->setParams(0, 1.1, 2.2, 4.5, 3.6);
     fc2->setParams(0, 1.1, 2.2, 4.5, 3.6);
 
@@ -550,23 +551,23 @@ void dihedral_force_comparison_tests(dihedralforce_creator tf_creator1,
         }
     }
 
-//! OPLSDihedralForceCompute creator for dihedral_force_basic_tests()
-std::shared_ptr<OPLSDihedralForceCompute>
+//! CombinedBTDihedralForceCompute creator for dihedral_force_basic_tests()
+std::shared_ptr<CombinedBTDihedralForceCompute>
 base_class_tf_creator(std::shared_ptr<SystemDefinition> sysdef)
     {
-    return std::shared_ptr<OPLSDihedralForceCompute>(new OPLSDihedralForceCompute(sysdef));
+    return std::shared_ptr<CombinedBTDihedralForceCompute>(new CombinedBTDihedralForceCompute(sysdef));
     }
 
 #ifdef ENABLE_HIP
 //! DihedralForceCompute creator for bond_force_basic_tests()
-std::shared_ptr<OPLSDihedralForceCompute> gpu_tf_creator(std::shared_ptr<SystemDefinition> sysdef)
+std::shared_ptr<CombinedBTDihedralForceCompute> gpu_tf_creator(std::shared_ptr<SystemDefinition> sysdef)
     {
-    return std::shared_ptr<OPLSDihedralForceCompute>(new OPLSDihedralForceComputeGPU(sysdef));
+    return std::shared_ptr<CombinedBTDihedralForceCompute>(new CombinedBTDihedralForceComputeGPU(sysdef));
     }
 #endif
 
 //! test case for dihedral forces on the CPU
-UP_TEST(OPLSDihedralForceCompute_basic)
+UP_TEST(CombinedBTDihedralForceCompute_basic)
     {
     printf(" IN UP_TEST: CPU \n");
     dihedralforce_creator tf_creator = bind(base_class_tf_creator, _1);
@@ -577,7 +578,7 @@ UP_TEST(OPLSDihedralForceCompute_basic)
 
 #ifdef ENABLE_HIP
 //! test case for dihedral forces on the GPU
-UP_TEST(OPLSDihedralForceComputeGPU_basic)
+UP_TEST(CombinedBTDihedralForceComputeGPU_basic)
     {
     printf(" IN UP_TEST: GPU \n");
     dihedralforce_creator tf_creator = bind(gpu_tf_creator, _1);
@@ -587,7 +588,7 @@ UP_TEST(OPLSDihedralForceComputeGPU_basic)
     }
 
 //! test case for comparing bond GPU and CPU BondForceComputes
-UP_TEST(OPLSDihedralForceComputeGPU_compare)
+UP_TEST(CombinedBTDihedralForceComputeGPU_compare)
     {
     dihedralforce_creator tf_creator_gpu = bind(gpu_tf_creator, _1);
     dihedralforce_creator tf_creator = bind(base_class_tf_creator, _1);
@@ -598,7 +599,7 @@ UP_TEST(OPLSDihedralForceComputeGPU_compare)
     }
 
 //! test case for comparing calculation on the CPU to multi-gpu ones
-UP_TEST(OPLSDihedralForce_MultiGPU_compare)
+UP_TEST(CombinedBTDihedralForce_MultiGPU_compare)
     {
     std::shared_ptr<ExecutionConfiguration> exec_conf(
         new ExecutionConfiguration(ExecutionConfiguration::GPU));

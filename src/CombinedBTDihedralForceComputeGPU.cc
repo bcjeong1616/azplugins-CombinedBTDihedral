@@ -2,35 +2,33 @@
 // Copyright (c) 2021-2024, Auburn University
 // Part of azplugins, released under the BSD 3-Clause License.
 
-/*! \file OPLSDihedralForceComputeGPU.cc
-    \brief Defines OPLSDihedralForceComputeGPU
+/*! \file CombinedBTDihedralForceComputeGPU.cc
+    \brief Defines CombinedBTDihedralForceComputeGPU
 */
 
-#include "OPLSDihedralForceComputeGPU.h"
+#include "CombinedBTDihedralForceComputeGPU.h"
 
 using namespace std;
 
-namespace hoomd
-    {
-namespace md
+namespace azplugins
     {
 /*! \param sysdef System to compute bond forces on
  */
-OPLSDihedralForceComputeGPU::OPLSDihedralForceComputeGPU(std::shared_ptr<SystemDefinition> sysdef)
-    : OPLSDihedralForceCompute(sysdef)
+CombinedBTDihedralForceComputeGPU::CombinedBTDihedralForceComputeGPU(std::shared_ptr<SystemDefinition> sysdef)
+    : CombinedBTDihedralForceCompute(sysdef)
     {
     // can't run on the GPU if there aren't any GPUs in the execution configuration
     if (!m_exec_conf->isCUDAEnabled())
         {
         m_exec_conf->msg->error()
-            << "Creating an OPLSDihedralForceComputeGPU with no GPU in execution configuration"
+            << "Creating an CombinedBTDihedralForceComputeGPU with no GPU in execution configuration"
             << endl;
-        throw std::runtime_error("Error initializing OPLSDihedralForceComputeGPU");
+        throw std::runtime_error("Error initializing CombinedBTDihedralForceComputeGPU");
         }
 
     m_tuner.reset(new Autotuner<1>({AutotunerBase::makeBlockSizeRange(m_exec_conf)},
                                    m_exec_conf,
-                                   "opls_dihedral"));
+                                   "combinedbt_dihedral"));
     m_autotuners.push_back(m_tuner);
     }
 
@@ -39,9 +37,9 @@ OPLSDihedralForceComputeGPU::OPLSDihedralForceComputeGPU(std::shared_ptr<SystemD
 
     \param timestep Current time step of the simulation
 
-    Calls gpu_compute_opls_dihedral_forces to do the dirty work.
+    Calls gpu_compute_combinedbt_dihedral_forces to do the dirty work.
 */
-void OPLSDihedralForceComputeGPU::computeForces(uint64_t timestep)
+void CombinedBTDihedralForceComputeGPU::computeForces(uint64_t timestep)
     {
     ArrayHandle<DihedralData::members_t> d_gpu_dihedral_list(m_dihedral_data->getGPUTable(),
                                                              access_location::device,
@@ -63,7 +61,7 @@ void OPLSDihedralForceComputeGPU::computeForces(uint64_t timestep)
 
     // run the kernel in parallel on all GPUs
     m_tuner->begin();
-    kernel::gpu_compute_opls_dihedral_forces(d_force.data,
+    kernel::gpu_compute_combinedbt_dihedral_forces(d_force.data,
                                              d_virial.data,
                                              m_virial.getPitch(),
                                              m_pdata->getN(),
@@ -84,14 +82,13 @@ void OPLSDihedralForceComputeGPU::computeForces(uint64_t timestep)
 
 namespace detail
     {
-void export_OPLSDihedralForceComputeGPU(pybind11::module& m)
+void export_CombinedBTDihedralForceComputeGPU(pybind11::module& m)
     {
-    pybind11::class_<OPLSDihedralForceComputeGPU,
-                     OPLSDihedralForceCompute,
-                     std::shared_ptr<OPLSDihedralForceComputeGPU>>(m, "OPLSDihedralForceComputeGPU")
+    pybind11::class_<CombinedBTDihedralForceComputeGPU,
+                     CombinedBTDihedralForceCompute,
+                     std::shared_ptr<CombinedBTDihedralForceComputeGPU>>(m, "CombinedBTDihedralForceComputeGPU")
         .def(pybind11::init<std::shared_ptr<SystemDefinition>>());
     }
 
     } // end namespace detail
-    } // end namespace md
-    } // end namespace hoomd
+    } // end namespace azplugins
