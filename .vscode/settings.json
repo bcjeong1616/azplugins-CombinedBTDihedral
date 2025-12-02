@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.hoomd": "python",
+        "cmath": "cpp"
+    }
+}
